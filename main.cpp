@@ -1,84 +1,101 @@
 #include <bits/stdc++.h>
-#include "json.hpp"
+#include "json.hpp"  
+
 using namespace std;
 using json = nlohmann::json;
 
-long long digitVal(char ch)
-{
-    if ('0' <= ch && ch <= '9')
-        return ch - '0';
-    if ('A' <= ch && ch <= 'Z')
-        return ch - 'A' + 10;
-    if ('a' <= ch && ch <= 'z')
-        return ch - 'a' + 10;
-    throw runtime_error("Invalid digit in value");
-}
 
-long long decodeBase(int base, const string &val)
-{
-    long long num = 0;
-    for (char ch : val)
-    {
-        long long d = digitVal(ch);
-        if (d >= base)
-            throw runtime_error("Digit >= base");
-        num = num * base + d;
-    }
-    return num;
-}
-
-// Lagrange interpolation at x = 0
-long long lagrange_at_zero(const vector<long long> &X, const vector<long long> &Y, int k)
-{
+long long decodeValue(const string &value, int base) {
     long long result = 0;
-    for (int i = 0; i < k; i++)
-    {
-        long double term = Y[i];
-        for (int j = 0; j < k; j++)
-        {
-            if (i != j)
-            {
-                term *= (-X[j]) / (long double)(X[i] - X[j]);
-            }
-        }
-        result += llround(term);
+    for (char ch : value) {
+        int digit;
+        if (isdigit(ch)) digit = ch - '0';
+        else if (isalpha(ch)) digit = tolower(ch) - 'a' + 10;
+        else throw runtime_error("Invalid digit in base representation");
+        if (digit >= base) throw runtime_error("Digit out of range for base");
+        result = result * base + digit;
     }
     return result;
 }
 
-int main()
-{
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
 
-    ifstream in("input.json");
-    if (!in.is_open())
-    {
-        cerr << "Failed to open input.json\n";
+vector<long double> gaussSolve(vector<vector<long double>> A, vector<long double> b) {
+    int n = A.size();
+    for (int i = 0; i < n; i++) {
+        
+        int pivot = i;
+        for (int r = i; r < n; r++) {
+            if (fabsl(A[r][i]) > fabsl(A[pivot][i])) pivot = r;
+        }
+        swap(A[i], A[pivot]);
+        swap(b[i], b[pivot]);
+
+        long double div = A[i][i];
+        for (int c = 0; c < n; c++) A[i][c] /= div;
+        b[i] /= div;
+
+        for (int r = 0; r < n; r++) {
+            if (r != i) {
+                long double factor = A[r][i];
+                for (int c = 0; c < n; c++) {
+                    A[r][c] -= factor * A[i][c];
+                }
+                b[r] -= factor * b[i];
+            }
+        }
+    }
+    return b;
+}
+
+int main() {
+   
+    ifstream inFile("input.json");
+    if (!inFile) {
+        cerr << "Error: Could not open input.json\n";
         return 1;
     }
 
     json j;
-    in >> j;
+    inFile >> j;
 
     int n = j["keys"]["n"];
     int k = j["keys"]["k"];
+    int m = k - 1; 
 
-    vector<long long> X, Y;
-    for (auto &el : j.items())
-    {
-        if (el.key() == "keys")
-            continue;
+  
+    vector<pair<long long, long long>> points;
+    for (auto &el : j.items()) {
+        if (el.key() == "keys") continue;
         long long x = stoll(el.key());
-        int base = stoi(el.value()["base"].get<string>());
-        string val = el.value()["value"];
-        long long y = decodeBase(base, val);
-        X.push_back(x);
-        Y.push_back(y);
+        string baseStr = el.value()["base"];
+        string valStr = el.value()["value"];
+        long long y = decodeValue(valStr, stoi(baseStr));
+        points.push_back({x, y});
     }
 
-    long long c = lagrange_at_zero(X, Y, k);
-    cout << "Constant term c = " << c << "\n";
+ 
+    sort(points.begin(), points.end());
+
+  
+    vector<pair<long long, long long>> sel(points.begin(), points.begin() + k);
+
+    vector<vector<long double>> A(k, vector<long double>(k));
+    vector<long double> b(k);
+    for (int i = 0; i < k; i++) {
+        long long xi = sel[i].first;
+        long long yi = sel[i].second;
+        for (int p = 0; p < k; p++) {
+            A[i][p] = pow((long double)xi, m - p);
+        }
+        b[i] = yi;
+    }
+
+    // Solve for coefficients
+    vector<long double> coeffs = gaussSolve(A, b);
+
+    // Constant term is last coefficient
+    cout << fixed << setprecision(0);
+    cout << coeffs.back() << "\n";
 
     return 0;
 }
